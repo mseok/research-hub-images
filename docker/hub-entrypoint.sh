@@ -40,7 +40,20 @@ link_persist "$PERSIST/.gemini" "/root/.gemini"
 link_persist "$PERSIST/.antigravity-server" "/root/.antigravity-server"
 link_persist "$PERSIST/.config" "/root/.config"
 link_persist "$PERSIST/.local" "/root/.local"
-link_persist "$PERSIST/.ssh" "/root/.ssh"
+
+# Keep /root/.ssh as a real 0700 root:root directory (OpenSSH StrictModes rejects symlinks through 0777 NFS /workspace).
+if [[ -L /root/.ssh ]]; then
+  rm -f /root/.ssh
+fi
+mkdir -p /root/.ssh
+chmod 700 /root/.ssh
+if [[ -f "$PERSIST/.ssh/authorized_keys" ]]; then
+  cp -f "$PERSIST/.ssh/authorized_keys" /root/.ssh/authorized_keys
+fi
+if [[ -f "$PERSIST/.ssh/config" ]]; then
+  cp -f "$PERSIST/.ssh/config" /root/.ssh/config
+  chmod 600 /root/.ssh/config
+fi
 
 for repo_dir in dot agent-skills; do
   if [[ -d "$PERSIST/$repo_dir" ]]; then
@@ -58,7 +71,7 @@ else
   chmod 600 "$PERSIST/ssh-host-keys/ssh_host_"*_key
 fi
 
-# Inject RunPod PUBLIC_KEY into persistent authorized_keys without losing existing keys.
+# Inject RunPod PUBLIC_KEY into /root/.ssh/authorized_keys and mirror to persistent storage.
 AUTH_KEYS="/root/.ssh/authorized_keys"
 touch "$AUTH_KEYS"
 chmod 600 "$AUTH_KEYS"
@@ -68,6 +81,8 @@ if [[ -n "${PUBLIC_KEY:-}" ]]; then
     grep -qxF "$key_line" "$AUTH_KEYS" || printf '%s\n' "$key_line" >> "$AUTH_KEYS"
   done <<< "$PUBLIC_KEY"
 fi
+cp -f "$AUTH_KEYS" "$PERSIST/.ssh/authorized_keys"
+chmod 600 "$PERSIST/.ssh/authorized_keys"
 
 # Ensure non-interactive SSH shells see /opt/hub tools and persistent ~/.local/bin.
 cat >/etc/profile.d/research-hub.sh <<'PROFILE'
