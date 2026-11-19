@@ -1,0 +1,70 @@
+# Reusable RunPod CPU Research Hub image (Ubuntu 24.04 x86_64).
+# Contains ONLY public open-source packages and tools (no proprietary code, keys, or data).
+# Prebuilt runtimes live under /opt/hub so /workspace Network Volume mounts never shadow them.
+FROM ubuntu:24.04
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    UV_INSTALL_DIR=/usr/local/bin \
+    UV_PYTHON_INSTALL_DIR=/opt/hub/uv_python \
+    PLAYWRIGHT_BROWSERS_PATH=/opt/hub/ms-playwright \
+    PATH=/opt/hub/bin:/opt/hub/envs/api-core/bin:/usr/local/bin:/root/.local/bin:$PATH
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    openssh-server ca-certificates curl wget git jq tmux rsync \
+    ripgrep fd-find build-essential pkg-config libffi-dev libssl-dev \
+    libcairo2 libcairo2-dev librsvg2-bin poppler-utils \
+    fonts-dejavu-core fonts-liberation libxrender1 libxext6 libgl1 libglib2.0-0 \
+    swig unzip gnupg python3 python3-venv \
+    && mkdir -p -m 755 /etc/apt/keyrings \
+    && curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+         -o /etc/apt/keyrings/githubcli-archive-keyring.gpg \
+    && chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+         > /etc/apt/sources.list.d/github-cli.list \
+    && curl -fsSL https://deb.nodesource.com/setup_24.x | bash - \
+    && apt-get update && apt-get install -y --no-install-recommends gh nodejs \
+    && ln -sf /usr/bin/fdfind /usr/local/bin/fd \
+    && sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin prohibit-password/' /etc/ssh/sshd_config \
+    && sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config \
+    && sed -i 's/^#\?PubkeyAuthentication.*/PubkeyAuthentication yes/' /etc/ssh/sshd_config \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install uv, Python 3.12, and Antigravity CLI (agy) under /opt/hub so /root symlinks never shadow them.
+RUN mkdir -p /opt/hub/bin /opt/hub/envs /opt/hub/uv_python /opt/hub/ms-playwright \
+    && curl -LsSf https://astral.sh/uv/install.sh | sh \
+    && uv python install 3.12 \
+    && curl -fsSL https://antigravity.google/cli/install.sh | bash -s -- --dir /opt/hub/bin \
+    && ln -sf /opt/hub/bin/agy /usr/local/bin/agy \
+    && /opt/hub/bin/agy --version
+
+# 1) API-core environment: OpenAI/RunPod orchestration, data pipelines, PDF/figure rendering, Playwright Chromium.
+RUN uv venv --python 3.12 /opt/hub/envs/api-core \
+    && uv pip install --no-cache --python /opt/hub/envs/api-core/bin/python \
+        "openai>=3.55.0" httpx aiohttp pydantic pandas pyarrow numpy scipy \
+        scikit-learn matplotlib pillow pypdf reportlab pyyaml tqdm jsonschema \
+        pytest ruff playwright \
+    && /opt/hub/envs/api-core/bin/playwright install --with-deps chromium \
+    && ln -sf /opt/hub/envs/api-core/bin/ruff /usr/local/bin/ruff \
+    && /opt/hub/envs/api-core/bin/python -c "import openai, httpx, aiohttp, pandas, pyarrow, scipy, matplotlib, pypdf, reportlab, playwright"
+
+# 2) Chem-bio environment: LeadAtlas, PromptHotspot, K-Fold, and science cheminformatics workflows.
+RUN uv venv --python 3.12 /opt/hub/envs/chem-bio \
+    && uv pip install --no-cache --python /opt/hub/envs/chem-bio/bin/python \
+        "openai>=3.55.0" rdkit gemmi posebusters networkx cairosvg cairocffi \
+        scipy numpy pandas pyarrow matplotlib pillow pyyaml biopython tqdm \
+    && /opt/hub/envs/chem-bio/bin/python -c "import rdkit, gemmi, posebusters, networkx, cairosvg, Bio, openai"
+
+# 3) Optimization & RL analysis environment: AgenticOptimization stack.
+RUN uv venv --python 3.12 /opt/hub/envs/opt-rl \
+    && uv pip install --no-cache --python /opt/hub/envs/opt-rl/bin/python \
+        "openai>=3.55.0" botorch cmaes cobra control "gymnasium[box2d]" \
+        optuna rdkit scikit-learn pydantic numpy scipy matplotlib pandas pyyaml \
+    && /opt/hub/envs/opt-rl/bin/python -c "import botorch, cmaes, cobra, control, gymnasium, optuna, rdkit, sklearn, openai" \
+    && rm -rf /root/.cache/pip /root/.cache/uv /tmp/*
+
+COPY docker/hub-entrypoint.sh /usr/local/bin/hub-entrypoint.sh
+RUN chmod +x /usr/local/bin/hub-entrypoint.sh
+
+EXPOSE 22
+WORKDIR /workspace
+ENTRYPOINT ["/usr/local/bin/hub-entrypoint.sh"]

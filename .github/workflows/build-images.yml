@@ -1,0 +1,74 @@
+name: Build and Push Research Hub Images
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["main"]
+    paths:
+      - "docker/**"
+      - ".github/workflows/build-images.yml"
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-research-hub:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push ghcr.io/mseok/research-hub
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile.research-hub
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ghcr.io/mseok/research-hub:v1
+            ghcr.io/mseok/research-hub:latest
+
+  build-leadatlas-rl:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Free GitHub runner disk space for CUDA base image
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          sudo docker image prune --all --force
+          df -h
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push ghcr.io/mseok/leadatlas-rl-runtime
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile.leadatlas-rl
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ghcr.io/mseok/leadatlas-rl-runtime:v1
+            ghcr.io/mseok/leadatlas-rl-runtime:latest

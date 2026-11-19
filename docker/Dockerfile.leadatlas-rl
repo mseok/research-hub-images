@@ -1,0 +1,18 @@
+# Reusable RunPod GPU runtime image for LeadAtlas Wave 2 SFT/GRPO campaigns.
+# Contains ONLY public open-source packages (no proprietary code, keys, or data).
+# Extends RunPod's PyTorch 2.8.0 CUDA 12.8.1 image with system-site-packages so PyTorch/CUDA is reused.
+FROM runpod/pytorch:2.8.0-py3.11-cuda12.8.1-cudnn-devel-ubuntu22.04
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    UV_INSTALL_DIR=/usr/local/bin \
+    PATH=/opt/leadatlas/venv/bin:/usr/local/bin:/root/.local/bin:$PATH
+
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
+    && mkdir -p /opt/leadatlas \
+    && BASE_PY="$(command -v python3)" \
+    && uv venv --system-site-packages --python "$BASE_PY" /opt/leadatlas/venv \
+    && uv pip install --no-cache --python /opt/leadatlas/venv/bin/python \
+        "transformers>=4.46" "peft>=0.13" accelerate datasets \
+        rdkit scipy numpy pyyaml "openai>=3.55.0" \
+    && /opt/leadatlas/venv/bin/python -c "import torch, transformers, peft, accelerate, rdkit, scipy, yaml, openai" \
+    && rm -rf /root/.cache/pip /root/.cache/uv /tmp/*
