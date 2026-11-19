@@ -54,12 +54,14 @@ RUN uv venv --python 3.12 /opt/hub/envs/chem-bio \
         scipy numpy pandas pyarrow matplotlib pillow pyyaml biopython tqdm \
     && /opt/hub/envs/chem-bio/bin/python -c "import rdkit, gemmi, posebusters, networkx, cairosvg, Bio, openai"
 
-# 3) Optimization & RL analysis environment: AgenticOptimization stack.
+# 3) Optimization & RL analysis environment: AgenticOptimization stack (CPU-only PyTorch to avoid 3GB unused CUDA wheels).
 RUN uv venv --python 3.12 /opt/hub/envs/opt-rl \
     && uv pip install --no-cache --python /opt/hub/envs/opt-rl/bin/python \
-        "openai>=3.55.0" botorch cmaes cobra control "gymnasium[box2d]" \
+        --index-strategy unsafe-best-match \
+        --extra-index-url https://download.pytorch.org/whl/cpu \
+        "torch" "openai>=3.55.0" botorch cmaes cobra control "gymnasium[box2d]" \
         optuna rdkit scikit-learn pydantic numpy scipy matplotlib pandas pyyaml \
-    && /opt/hub/envs/opt-rl/bin/python -c "import botorch, cmaes, cobra, control, gymnasium, optuna, rdkit, sklearn, openai" \
+    && /opt/hub/envs/opt-rl/bin/python -c "import torch, botorch, cmaes, cobra, control, gymnasium, optuna, rdkit, sklearn, openai" \
     && rm -rf /root/.cache/pip /root/.cache/uv /tmp/*
 
 COPY docker/hub-entrypoint.sh /usr/local/bin/hub-entrypoint.sh
